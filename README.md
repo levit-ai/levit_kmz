@@ -1,11 +1,13 @@
 # kmz_plugin
-DJI KMZ plugin for vscode. Developed by [jasper](https://github.com/jaspereb)
+DJI KMZ plugin for vscode/cursor. Lets you open these files without unzipping them and also provides a map viewer. 
+
+Developed by [jasper](https://github.com/jaspereb)
 
 ! This repo is public, don't commit anything sensitive ! 
 
 ## Install
 
-Open the **[latest release](https://github.com/jasper-levit/kmz_plugin/releases/tag/latest)**. Under **Assets**, download `levit-kmz-<version>.vsix` (the version matches `package.json` for that build).
+Open the **[latest release](https://github.com/levit-ai/levit_kmz/releases)**. Under **Assets**, download `levit-kmz-<version>.vsix` (the version matches `package.json` for that build).
 
 In VS Code or Cursor, open the Extensions view, choose **⋯** (Views and more actions) → **Install from VSIX…**, and select the downloaded file. Reload if prompted.
 
