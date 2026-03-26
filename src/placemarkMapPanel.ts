@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import type { ParsedPlacemarkPoint } from './kmlPlacemarks';
 
@@ -13,6 +14,11 @@ const TILE_IMAGERY =
 const TILE_IMAGERY_ATTRIBUTION =
   '&copy; Esri, Maxar, Earthstar Geographics, and the GIS User Community';
 
+/** Highest zoom Esri World Imagery serves; above this, tiles are upscaled. */
+const TILE_MAX_NATIVE_ZOOM = 19;
+/** Map / layer zoom ceiling (arbitrary deep zoom via scaled tiles). */
+const MAP_MAX_ZOOM = 26;
+
 /** Allow tile/CDN hosts Esri may redirect to from the webview. */
 const TILE_IMG_CSP = [
   'https://services.arcgisonline.com',
@@ -23,6 +29,13 @@ const TILE_IMG_CSP = [
 ].join(' ');
 
 let activePanel: vscode.WebviewPanel | undefined;
+
+const LIVE_RELOAD_DEBOUNCE_MS = 200;
+
+export type PlacemarkMapLiveReload = {
+  reload: () => Promise<{ template: ParsedPlacemarkPoint[]; waylines: ParsedPlacemarkPoint[] }>;
+  watchUris: vscode.Uri[];
+};
 
 function getNonce(): string {
   let text = '';
@@ -37,7 +50,8 @@ export function openPlacemarkMapPanel(
   context: vscode.ExtensionContext,
   title: string,
   template: ParsedPlacemarkPoint[],
-  waylines: ParsedPlacemarkPoint[]
+  waylines: ParsedPlacemarkPoint[],
+  liveReload?: PlacemarkMapLiveReload
 ): void {
   if (activePanel) {
     activePanel.dispose();
@@ -62,14 +76,52 @@ export function openPlacemarkMapPanel(
 
   panel.webview.html = getHtml(csp, nonce);
 
-  const sendData = (): void => {
+  const postParsed = (t: ParsedPlacemarkPoint[], w: ParsedPlacemarkPoint[]): void => {
     const payload = {
       type: 'data' as const,
-      template: template.map(stripSource),
-      waylines: waylines.map(stripSource),
+      template: t.map(stripSource),
+      waylines: w.map(stripSource),
     };
     void panel.webview.postMessage(payload);
   };
+
+  const sendData = (): void => postParsed(template, waylines);
+
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  const watchDisposables: vscode.Disposable[] = [];
+
+  const scheduleReload = (): void => {
+    if (!liveReload) {
+      return;
+    }
+    if (debounceTimer !== undefined) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(() => {
+      debounceTimer = undefined;
+      void liveReload.reload().then(
+        (next) => postParsed(next.template, next.waylines),
+        (err) => console.warn('[levit-kmz] Map reload failed:', err)
+      );
+    }, LIVE_RELOAD_DEBOUNCE_MS);
+  };
+
+  if (liveReload) {
+    const seen = new Set<string>();
+    for (const uri of liveReload.watchUris) {
+      const key = uri.toString();
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      const folder = vscode.Uri.file(path.dirname(uri.fsPath));
+      const pattern = path.basename(uri.fsPath);
+      const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, pattern));
+      watcher.onDidChange(scheduleReload);
+      watcher.onDidCreate(scheduleReload);
+      watchDisposables.push(watcher);
+    }
+  }
 
   panel.webview.onDidReceiveMessage((msg: { type?: string }) => {
     if (msg?.type === 'ready') {
@@ -80,6 +132,12 @@ export function openPlacemarkMapPanel(
   panel.onDidDispose(() => {
     if (activePanel === panel) {
       activePanel = undefined;
+    }
+    if (debounceTimer !== undefined) {
+      clearTimeout(debounceTimer);
+    }
+    for (const d of watchDisposables) {
+      d.dispose();
     }
   });
   context.subscriptions.push(panel);
@@ -123,10 +181,17 @@ function getHtml(csp: string, nonce: string): string {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
 
+    var mapInstance = null;
     function renderMap(template, waylines) {
-      const map = L.map('map');
+      if (mapInstance) {
+        mapInstance.remove();
+        mapInstance = null;
+      }
+      mapInstance = L.map('map', { maxZoom: ${MAP_MAX_ZOOM} });
+      var map = mapInstance;
       L.tileLayer('${TILE_IMAGERY}', {
-        maxZoom: 19,
+        maxZoom: ${MAP_MAX_ZOOM},
+        maxNativeZoom: ${TILE_MAX_NATIVE_ZOOM},
         attribution: '${TILE_IMAGERY_ATTRIBUTION.replace(/'/g, "\\'")}'
       }).addTo(map);
 
