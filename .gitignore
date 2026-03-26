@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# TypeScript build output (see package.json "main")
+out/
+
+# VS Code test runner: downloaded VS Code + user data & cache
+.vscode-test/
+
+# Packaged extension builds
+*.vsix
+
+# Vitest / tooling
+coverage/
+*.lcov
+
+# OS & editor noise
+.DS_Store
+*.log

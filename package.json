@@ -1,0 +1,86 @@
+{
+  "name": "levit-kmz",
+  "displayName": "LevitKMZ",
+  "description": "Tools for working with DJI KMZ files.",
+  "version": "0.1.2",
+  "publisher": "jasper",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/levit-ai/levit_kmz"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onFileSystem:kmz",
+    "onCommand:kmz.openAsWorkspaceFolder",
+    "onCommand:kmz.showPlacemarkMap"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "kmz.openAsWorkspaceFolder",
+        "title": "Open KMZ as Workspace Folder",
+        "category": "KMZ"
+      },
+      {
+        "command": "kmz.showPlacemarkMap",
+        "title": "Show placemarks on map",
+        "category": "KMZ"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "kmz.openAsWorkspaceFolder",
+          "when": "resourceExtname == .kmz",
+          "group": "navigation@100"
+        },
+        {
+          "command": "kmz.showPlacemarkMap",
+          "when": "resourceExtname == .kmz || resourceExtname == .kml || resourceExtname == .wpml",
+          "group": "navigation@101"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "kmz.showPlacemarkMap",
+          "when": "resourceExtname == .kmz || resourceExtname == .kml || resourceExtname == .wpml",
+          "group": "navigation@101"
+        }
+      ]
+    },
+    "configurationDefaults": {
+      "files.associations": {
+        "*.wpml": "xml"
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "vitest run",
+    "test:integration": "npm run compile && node ./out/test/runTest.js",
+    "verify:cursor": "bash ./verify-reinstall-loop.sh"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.4.0",
+    "glob": "^10.3.10",
+    "mocha": "^10.3.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.5.5",
+    "jszip": "^3.10.1",
+    "vscode-uri": "^3.1.0"
+  }
+}
