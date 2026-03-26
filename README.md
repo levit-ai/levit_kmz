@@ -1,6 +1,8 @@
 # kmz_plugin
 DJI KMZ plugin for vscode. Developed by [jasper](https://github.com/jaspereb)
 
+! This repo is public, don't commit anything sensitive ! 
+
 ## Install
 
 Open the **[latest release](https://github.com/jasper-levit/kmz_plugin/releases/tag/latest)**. Under **Assets**, download `levit-kmz-<version>.vsix` (the version matches `package.json` for that build).
