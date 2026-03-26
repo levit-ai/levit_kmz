@@ -1,6 +1,10 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { extractPlacemarkPoints, type ParsedPlacemarkPoint, type PlacemarkSource } from './kmlPlacemarks';
+import {
+  extractPlacemarkPointsWithSpans,
+  type ParsedPlacemarkPoint,
+  type PlacemarkSource,
+} from './kmlPlacemarks';
 import { openPlacemarkMapPanel } from './placemarkMapPanel';
 import { kmzUri, parseKmzUri } from './uri';
 
@@ -35,8 +39,8 @@ export async function showPlacemarkMap(context: vscode.ExtensionContext, resourc
 function decodeKmzArchiveBytes(templateBytes: Uint8Array, waylinesBytes: Uint8Array): PlacemarkSeries {
   const decoder = new TextDecoder('utf8', { fatal: false });
   return {
-    template: extractPlacemarkPoints(decoder.decode(templateBytes), 'template'),
-    waylines: extractPlacemarkPoints(decoder.decode(waylinesBytes), 'waylines'),
+    template: extractPlacemarkPointsWithSpans(decoder.decode(templateBytes), 'template'),
+    waylines: extractPlacemarkPointsWithSpans(decoder.decode(waylinesBytes), 'waylines'),
   };
 }
 
@@ -84,9 +88,14 @@ async function showFromKmzArchive(context: vscode.ExtensionContext, archiveFsPat
 
   const title = `KMZ map — ${path.basename(archiveFsPath)}`;
   const archiveUri = vscode.Uri.file(archiveFsPath);
+  const templateWriteUri = vscode.Uri.parse(kmzUri(archiveFsPath, 'wpmz/template.kml').toString());
+  const waylinesWriteUri = vscode.Uri.parse(kmzUri(archiveFsPath, 'wpmz/waylines.wpml').toString());
   openPlacemarkMapPanel(context, title, data.template, data.waylines, {
-    reload: () => loadKmzArchivePlacemarks(archiveFsPath),
-    watchUris: [archiveUri],
+    liveReload: {
+      reload: () => loadKmzArchivePlacemarks(archiveFsPath),
+      watchUris: [archiveUri],
+    },
+    edit: { templateUri: templateWriteUri, waylinesUri: waylinesWriteUri },
   });
 }
 
@@ -97,8 +106,8 @@ async function loadStandalonePlacemarks(file: vscode.Uri): Promise<PlacemarkSeri
   const lower = file.fsPath.toLowerCase();
   const source: PlacemarkSource = lower.endsWith('.wpml') ? 'waylines' : 'template';
   return {
-    template: source === 'template' ? extractPlacemarkPoints(text, 'template') : [],
-    waylines: source === 'waylines' ? extractPlacemarkPoints(text, 'waylines') : [],
+    template: source === 'template' ? extractPlacemarkPointsWithSpans(text, 'template') : [],
+    waylines: source === 'waylines' ? extractPlacemarkPointsWithSpans(text, 'waylines') : [],
   };
 }
 
@@ -116,9 +125,14 @@ async function showFromStandaloneXml(context: vscode.ExtensionContext, file: vsc
   }
 
   const title = `KMZ map — ${path.basename(file.fsPath)}`;
+  const lower = file.fsPath.toLowerCase();
+  const edit =
+    lower.endsWith('.kml') || lower.endsWith('.wpml')
+      ? { templateUri: lower.endsWith('.kml') ? file : undefined, waylinesUri: lower.endsWith('.wpml') ? file : undefined }
+      : undefined;
   openPlacemarkMapPanel(context, title, data.template, data.waylines, {
-    reload: () => loadStandalonePlacemarks(file),
-    watchUris: [file],
+    liveReload: { reload: () => loadStandalonePlacemarks(file), watchUris: [file] },
+    edit,
   });
 }
 
@@ -129,8 +143,8 @@ async function loadVirtualKmzPlacemarks(resource: vscode.Uri): Promise<Placemark
   const decoder = new TextDecoder('utf8', { fatal: false });
   const text = decoder.decode(bytes);
   return {
-    template: source === 'template' ? extractPlacemarkPoints(text, 'template') : [],
-    waylines: source === 'waylines' ? extractPlacemarkPoints(text, 'waylines') : [],
+    template: source === 'template' ? extractPlacemarkPointsWithSpans(text, 'template') : [],
+    waylines: source === 'waylines' ? extractPlacemarkPointsWithSpans(text, 'waylines') : [],
   };
 }
 
@@ -150,9 +164,17 @@ async function showFromVirtualKmzFile(context: vscode.ExtensionContext, resource
   const { archiveUri, innerPath } = parseKmzUri(resource);
   const innerLabel = innerPath ? path.posix.basename(innerPath) : 'file';
   const title = `KMZ map — ${path.basename(archiveUri.fsPath)} (${innerLabel})`;
+  const src = placemarkSourceForInnerPath(innerPath);
+  const edit =
+    src === 'template'
+      ? { templateUri: resource, waylinesUri: undefined }
+      : { templateUri: undefined, waylinesUri: resource };
   openPlacemarkMapPanel(context, title, data.template, data.waylines, {
-    reload: () => loadVirtualKmzPlacemarks(resource),
-    watchUris: [vscode.Uri.file(archiveUri.fsPath)],
+    liveReload: {
+      reload: () => loadVirtualKmzPlacemarks(resource),
+      watchUris: [vscode.Uri.file(archiveUri.fsPath)],
+    },
+    edit,
   });
 }
 
