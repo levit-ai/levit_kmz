@@ -79,7 +79,7 @@
     "vitest": "^1.2.0"
   },
   "dependencies": {
-    "fast-xml-parser": "^4.5.5",
+    "fast-xml-parser": "^5.5.7",
     "jszip": "^3.10.1",
     "vscode-uri": "^3.1.0"
   }
