@@ -5,13 +5,34 @@ export type PlacemarkSource = 'template' | 'waylines';
 /** UTF-16 code unit offsets into the XML string; replaces `xml.slice(start, end)` inside `<coordinates>`. */
 export type CoordSpan = { start: number; end: number };
 
+export type WaypointAction = {
+  /** DJI actuator function, e.g. takePhoto, gimbalRotate, hover. */
+  func: string;
+  /** Actuator params, stringified scalar values. */
+  params: Record<string, string>;
+};
+
+/** Where a point's displayed height came from (also the field an edit writes back to). */
+export type HeightField = 'executeHeight' | 'height' | 'coordinates';
+
 export type ParsedPlacemarkPoint = {
   lon: number;
   lat: number;
+  /** Altitude from the KML coordinates string, if present. */
   alt?: number;
+  /** wpml:index, if present. */
   index?: number;
+  /** 0-based position among all Placemarks in the file, in document order. */
+  ordinal: number;
   source: PlacemarkSource;
   coordSpan?: CoordSpan;
+  /** Best-known waypoint height in metres: executeHeight ?? height ?? coordinate alt. */
+  height?: number;
+  heightField?: HeightField;
+  ellipsoidHeight?: number;
+  actions: WaypointAction[];
+  /** Remaining simple per-waypoint fields (speed, heading, turn params, …), flattened to dot paths. */
+  extra: Record<string, string>;
 };
 
 const parser = new XMLParser({
@@ -29,10 +50,10 @@ export function extractPlacemarkPoints(xml: string, source: PlacemarkSource): Pa
   }
   const marks = collectPlacemarks(root);
   const out: ParsedPlacemarkPoint[] = [];
-  for (const m of marks) {
-    const pt = placemarkToPoint(m);
+  for (let ordinal = 0; ordinal < marks.length; ordinal++) {
+    const pt = placemarkToPoint(marks[ordinal]);
     if (pt) {
-      out.push({ ...pt, source });
+      out.push({ ...pt, ordinal, source });
     }
   }
   return out;
@@ -195,7 +216,10 @@ function collectPlacemarks(node: unknown): unknown[] {
   return marks;
 }
 
-function placemarkToPoint(mark: unknown): Omit<ParsedPlacemarkPoint, 'source'> | null {
+/** Fields that get dedicated handling and are excluded from `extra`. */
+const NON_EXTRA_KEYS = new Set(['Point', 'index', 'executeHeight', 'height', 'ellipsoidHeight', 'actionGroup']);
+
+function placemarkToPoint(mark: unknown): Omit<ParsedPlacemarkPoint, 'source' | 'ordinal'> | null {
   if (!mark || typeof mark !== 'object') {
     return null;
   }
@@ -208,8 +232,108 @@ function placemarkToPoint(mark: unknown): Omit<ParsedPlacemarkPoint, 'source'> |
   if (!parsed) {
     return null;
   }
-  const idx = parseOptionalIndex(o);
-  return { ...parsed, index: idx };
+
+  const execHeight = parseOptionalNumber(o['executeHeight']);
+  const wpmlHeight = parseOptionalNumber(o['height']);
+  const ellipsoidHeight = parseOptionalNumber(o['ellipsoidHeight']);
+
+  let height: number | undefined;
+  let heightField: HeightField | undefined;
+  if (execHeight !== undefined) {
+    height = execHeight;
+    heightField = 'executeHeight';
+  } else if (wpmlHeight !== undefined) {
+    height = wpmlHeight;
+    heightField = 'height';
+  } else if (parsed.alt !== undefined) {
+    height = parsed.alt;
+    heightField = 'coordinates';
+  }
+
+  return {
+    ...parsed,
+    index: parseOptionalIndex(o),
+    height,
+    heightField,
+    ellipsoidHeight,
+    actions: extractActions(o['actionGroup']),
+    extra: flattenExtra(o),
+  };
+}
+
+function extractActions(actionGroup: unknown): WaypointAction[] {
+  const groups = actionGroup == null ? [] : Array.isArray(actionGroup) ? actionGroup : [actionGroup];
+  const out: WaypointAction[] = [];
+  for (const g of groups) {
+    if (!g || typeof g !== 'object') {
+      continue;
+    }
+    const rawActions = (g as Record<string, unknown>)['action'];
+    const actions = rawActions == null ? [] : Array.isArray(rawActions) ? rawActions : [rawActions];
+    for (const a of actions) {
+      if (!a || typeof a !== 'object') {
+        continue;
+      }
+      const ao = a as Record<string, unknown>;
+      const func = isScalar(ao['actionActuatorFunc']) ? String(ao['actionActuatorFunc']) : 'unknown';
+      const params: Record<string, string> = {};
+      const rawParams = ao['actionActuatorFuncParam'];
+      if (rawParams && typeof rawParams === 'object' && !Array.isArray(rawParams)) {
+        for (const [k, v] of Object.entries(rawParams as Record<string, unknown>)) {
+          if (isScalar(v)) {
+            params[k] = String(v);
+          }
+        }
+      }
+      out.push({ func, params });
+    }
+  }
+  return out;
+}
+
+function flattenExtra(o: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (NON_EXTRA_KEYS.has(k)) {
+      continue;
+    }
+    flattenInto(out, k, v, 0);
+  }
+  return out;
+}
+
+function flattenInto(out: Record<string, string>, key: string, value: unknown, depth: number): void {
+  if (value === null || value === undefined) {
+    return;
+  }
+  if (isScalar(value)) {
+    out[key] = String(value);
+    return;
+  }
+  if (depth >= 3) {
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((v, i) => flattenInto(out, `${key}[${i}]`, v, depth + 1));
+    return;
+  }
+  if (typeof value === 'object') {
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      flattenInto(out, k === '#text' ? key : `${key}.${k}`, v, depth + 1);
+    }
+  }
+}
+
+function isScalar(v: unknown): v is string | number | boolean {
+  return typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+}
+
+function parseOptionalNumber(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+  const n = typeof raw === 'number' ? raw : Number(String(raw));
+  return Number.isFinite(n) ? n : undefined;
 }
 
 function findCoordinates(point: unknown): string | undefined {

@@ -1,8 +1,9 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { KmzFileSystemProvider } from './kmzFsProvider';
-import { showPlacemarkMap } from './placemarkMap';
+import { showPlacemark3d, showPlacemarkMap } from './placemarkMap';
 import { kmzRootUri } from './uri';
+import { registerXmlTools } from './xmlTools';
 
 const KMZ_SCHEME = 'kmz';
 
@@ -44,6 +45,14 @@ export function activate(context: vscode.ExtensionContext): void {
       await showPlacemarkMap(context, resource);
     })
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('kmz.showPlacemark3d', async (resource?: vscode.Uri) => {
+      await showPlacemark3d(context, resource);
+    })
+  );
+
+  registerXmlTools(context);
 
   const provider = new KmzFileSystemProvider();
   context.subscriptions.push(vscode.workspace.registerFileSystemProvider(KMZ_SCHEME, provider, { isCaseSensitive: true }));
