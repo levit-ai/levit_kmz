@@ -17,7 +17,9 @@
   "activationEvents": [
     "onFileSystem:kmz",
     "onCommand:kmz.openAsWorkspaceFolder",
-    "onCommand:kmz.showPlacemarkMap"
+    "onCommand:kmz.showPlacemarkMap",
+    "onCommand:kmz.showPlacemark3d",
+    "onLanguage:xml"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -30,6 +32,11 @@
       {
         "command": "kmz.showPlacemarkMap",
         "title": "Show placemarks on map",
+        "category": "KMZ"
+      },
+      {
+        "command": "kmz.showPlacemark3d",
+        "title": "Show placemarks in 3D",
         "category": "KMZ"
       }
     ],
@@ -44,6 +51,11 @@
           "command": "kmz.showPlacemarkMap",
           "when": "resourceExtname == .kmz || resourceExtname == .kml || resourceExtname == .wpml",
           "group": "navigation@101"
+        },
+        {
+          "command": "kmz.showPlacemark3d",
+          "when": "resourceExtname == .kmz || resourceExtname == .kml || resourceExtname == .wpml",
+          "group": "navigation@102"
         }
       ],
       "editor/context": [
@@ -51,12 +63,58 @@
           "command": "kmz.showPlacemarkMap",
           "when": "resourceExtname == .kmz || resourceExtname == .kml || resourceExtname == .wpml",
           "group": "navigation@101"
+        },
+        {
+          "command": "kmz.showPlacemark3d",
+          "when": "resourceExtname == .kmz || resourceExtname == .kml || resourceExtname == .wpml",
+          "group": "navigation@102"
         }
       ]
     },
     "configurationDefaults": {
       "files.associations": {
-        "*.wpml": "xml"
+        "*.wpml": "xml",
+        "*.kml": "xml"
+      }
+    },
+    "configuration": {
+      "title": "LevitKMZ",
+      "properties": {
+        "levitKmz.stats.speedMps": {
+          "type": "number",
+          "default": 8,
+          "minimum": 0.1,
+          "description": "Flight speed (m/s) used for the estimated mission time in the stats popout."
+        },
+        "levitKmz.stats.secondsPerWaypoint": {
+          "type": "number",
+          "default": 7,
+          "minimum": 0,
+          "description": "Extra seconds added per waypoint to the estimated mission time."
+        },
+        "levitKmz.validation.pythonPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Path to the (venv) python used to run the basestation KMZ safety validator. Both this and the repo path must be set for the Validate button to appear."
+        },
+        "levitKmz.validation.basestationRepo": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Path to a basestation repo checkout containing dji_dock/manual_utils/validate_kmz_safety.py."
+        },
+        "levitKmz.validation.dockSerial": {
+          "type": "string",
+          "default": "",
+          "description": "Dock serial passed to the safety validator. Prompted for (and saved) on first run if empty."
+        },
+        "levitKmz.validation.extraArgs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Extra arguments appended to the validator command, e.g. [\"--airborne\", \"--buffer-m\", \"15\"]."
+        }
       }
     }
   },
